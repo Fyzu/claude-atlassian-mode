@@ -1,0 +1,15 @@
+{
+  "name": "claude-atlassian-mode",
+  "description": "Claude Code mod: Jira + Bitbucket Data Center review queue, PR bar and status for the current branch",
+  "owner": {
+    "name": "Dmitry Petrov",
+    "url": "https://github.com/Fyzu"
+  },
+  "plugins": [
+    {
+      "name": "jira-bitbucket",
+      "source": "./",
+      "description": "Bitbucket Data Center review queue and your open PRs in a pane; the current branch's PR, CI and Jira issue in a bar above the prompt"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# Written by Claude Code when the mod loads (API typings for the editor)
+.claude-plugin/types/
+
+.DS_Store
+node_modules/

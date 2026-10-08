@@ -1,0 +1,51 @@
+{
+  "name": "jira-bitbucket",
+  "version": "0.1.0",
+  "description": "Bitbucket review queue and your open PRs in a pane; the current branch's PR, CI and Jira issue in a bar above the prompt",
+  "author": {
+    "name": "Dmitry Petrov",
+    "url": "https://github.com/Fyzu"
+  },
+  "homepage": "https://github.com/Fyzu/claude-atlassian-mode",
+  "repository": "https://github.com/Fyzu/claude-atlassian-mode",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "bkt": {
+      "type": "string",
+      "title": "bkt executable",
+      "description": "Path or name of the bkt CLI used for Bitbucket Data Center REST calls.",
+      "default": "bkt"
+    },
+    "jiraServer": {
+      "type": "string",
+      "title": "Jira MCP server",
+      "description": "Name of the connected MCP server that has the jira_search tool (mcp-atlassian).",
+      "default": "atlassian"
+    },
+    "jiraUrl": {
+      "type": "string",
+      "title": "Jira URL",
+      "description": "Base URL of Jira for issue links, e.g. https://jira.example.com. Leave empty to show issue keys without links.",
+      "default": ""
+    },
+    "refreshMinutes": {
+      "type": "number",
+      "title": "Refresh interval (minutes)",
+      "description": "How often the pane and status line poll Bitbucket and Jira.",
+      "default": 3
+    },
+    "reviewLimit": {
+      "type": "number",
+      "title": "Review queue size",
+      "description": "How many PRs awaiting your review the pane lists (newest first).",
+      "default": 20
+    },
+    "openOnStart": {
+      "type": "boolean",
+      "title": "Open pane on session start",
+      "description": "Open the pane when a session starts (it is otherwise opened with /jb).",
+      "default": false
+    }
+  }
+}
