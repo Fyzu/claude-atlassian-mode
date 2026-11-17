@@ -149,7 +149,9 @@ test('pane, band and status line show the queue, my PRs and the branch PR', { op
     presentation: { isFullscreen: false, columns: 80 },
   })
 
-  expect(status).toBeUndefined()
+  expect(status).toBe(
+    '⎇ feature/CORE-2043_md-buildpacks · #912 Open · CI ✕ 1/2 · ⚠ 1/2 approved · Conflicts · CORE-2043 In Progress',
+  )
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const band = await $.ui.mount({
@@ -158,6 +160,7 @@ test('pane, band and status line show the queue, my PRs and the branch PR', { op
       component: 'AbovePrompt',
       props: {
         hasSurvey: false,
+        isCollapsed: false,
         isWorking: false,
         maxRows: 12,
         bodyColumns: 90,
@@ -244,5 +247,58 @@ test('pane, band and status line show the queue, my PRs and the branch PR', { op
     await ui.press({ key: 'mine-CORE-core-912-go' })
     expect(filled).toContain('Check my Bitbucket PR CORE/core#912')
     await ui.unmount()
+  }
+})
+
+test('band shows the branch and its Jira issue when the branch has no PR', async ($, on) => {
+  mock.clock(on, { now: 10_000_000 })
+  mock.store(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.cwd', () => ({ value: '/work/core' }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Box', props: {}, children: [] }))
+  on('process.run', ($, e) => {
+    const [bin, ...args] = e.argv
+    if (bin === 'git' && args[0] === 'rev-parse') return { value: { ...ok(null), stdout: 'feature/CORE-2043_md-buildpacks\n' } }
+    if (bin === 'git') return { value: { ...ok(null), stdout: 'ssh://git@stash.example.com:7999/core/core.git\n' } }
+    const path = String(args[1] ?? '')
+    if (path.includes('dashboard') || path.includes('pull-requests?at=')) return { value: ok({ values: [], isLastPage: true }) }
+    return { value: ok({}) }
+  })
+  on('mcp.call', () => ({
+    value: { isError: false, content: [{ type: 'text', text: JSON.stringify({ result: JSON.stringify(ISSUES) }) }] },
+  }))
+  on('ui.status', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/work/core', surface: 'desktop', isInteractive: true })
+  await $.command.run({
+    command: 'jb',
+    args: 'refresh',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 80 },
+  })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const band = await $.ui.mount({
+      plugin: 'jira-bitbucket',
+      surface,
+      component: 'AbovePrompt',
+      props: {
+        hasSurvey: false,
+        isCollapsed: false,
+        isWorking: false,
+        maxRows: 12,
+        bodyColumns: 90,
+        scroll: { offset: 0, bodyRows: 12 },
+        view: {},
+      },
+    })
+    // drawn like the PR bar: the key where the number goes, the summary as the title
+    expect(JSON.stringify(await band.find({ key: 'band-branch' }))).toContain('CORE-2043')
+    expect(await band.find({ type: 'Text', text: /^Build images$/ })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: /^In Progress$/ })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: /^No PR$/ })).toBeDefined()
+    expect(JSON.stringify(await band.drawn()).includes('"type":"Svg"')).toBe(surface === 'desktop')
+    await band.unmount()
   }
 })

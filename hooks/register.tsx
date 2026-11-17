@@ -263,6 +263,10 @@ async function jiraIssues($: Api, cfg: Config, keys: string[]): Promise<Record<s
 
 let inflight: Promise<void> | null = null
 
+// Set once the surface draws the band above the prompt; until then (a surface
+// that never raises it) the status line carries the branch instead.
+let isBandDrawn = false
+
 function refresh($: Api, cfg: Config): Promise<void> {
   inflight ??= load($, cfg).finally(() => {
     inflight = null
@@ -309,7 +313,8 @@ async function load($: Api, cfg: Config): Promise<void> {
       branch,
     }
   } catch (err) {
-    await update($, snapshot, s => ({ ...s, isLoading: false, error: message(err) }))
+    const failed = await update($, snapshot, s => ({ ...s, isLoading: false, error: message(err) }))
+    if (!isBandDrawn) $.ui.status(statusLine(failed))
     return
   }
 
@@ -330,7 +335,8 @@ async function load($: Api, cfg: Config): Promise<void> {
     jiraError = message(err)
   }
 
-  await update($, snapshot, prev => ({ ...fresh, issues: issues ?? prev.issues, jiraError }))
+  const next = await update($, snapshot, prev => ({ ...fresh, issues: issues ?? prev.issues, jiraError }))
+  if (!isBandDrawn) $.ui.status(statusLine(next))
 }
 
 async function checkBranch($: Api, cfg: Config): Promise<void> {
@@ -349,6 +355,37 @@ function buildText(build: JbBuild | null): string {
   if (build.failed > 0) return 'build ✗'
   if (build.running > 0) return 'build …'
   return 'build ✓'
+}
+
+// The status line under the prompt: the current branch, its PR, CI, approvals
+// and Jira issue on one line. Undefined (cleared) outside a git branch.
+function statusLine(s: JbSnapshot): string | undefined {
+  const branch = s.branch
+  if (!branch) return undefined
+  const parts = [`⎇ ${branch.name}`]
+  const { pr, detail } = branch
+  if (pr && detail) {
+    parts.push(`#${pr.id} ${PR_STATE[detail.state]?.label ?? detail.state}`)
+    const failed = detail.checks.filter(c => c.state === 'failed').length
+    const running = detail.checks.filter(c => c.state === 'running').length
+    if (failed > 0) parts.push(`CI ✕ ${failed}/${detail.checks.length}`)
+    else if (running > 0) parts.push(`CI ● ${running}/${detail.checks.length}`)
+    else if (detail.checks.length > 0) parts.push('CI ✓')
+    if (pr.reviewers.length > 0) {
+      parts.push(`${needsWorkOf(pr) ? '⚠' : '✓'} ${approvedOf(pr)}/${pr.reviewers.length} approved`)
+    }
+    const merge = mergePill(detail)
+    if (merge) parts.push(merge.text)
+  } else if (!s.error) {
+    parts.push('no PR')
+  }
+  const issueKey = branch.issueKey ?? pr?.issueKey
+  if (issueKey) {
+    const issue = s.issues[issueKey]
+    parts.push(issue?.status ? `${issueKey} ${issue.status}` : issueKey)
+  }
+  if (s.error) parts.push('Bitbucket unavailable')
+  return parts.join(' · ')
 }
 
 function buildColor(build: JbBuild | null): string | undefined {
@@ -426,6 +463,15 @@ const PR_STATE: Record<JbPrDetail['state'], { label: string; stroke: string; col
   DRAFT: { label: 'Draft', stroke: '#6e7781' },
   MERGED: { label: 'Merged', stroke: '#8250df', color: 'magenta' },
   DECLINED: { label: 'Declined', stroke: '#cf222e', color: 'red' },
+}
+
+function branchIconSvg(stroke: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" ` +
+    `stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">` +
+    `<circle cx="4.5" cy="3.5" r="1.75"/><circle cx="4.5" cy="12.5" r="1.75"/><circle cx="11.5" cy="5" r="1.75"/>` +
+    `<path d="M4.5 5.25v5.5"/><path d="M11.5 6.75c0 3-7 2-7 4"/></svg>`
+  )
 }
 
 function prIconSvg(stroke: string): string {
@@ -568,12 +614,66 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const s = await read($, snapshot)
+    if (!isBandDrawn) {
+      // the surface draws the band: it carries what the status line would
+      isBandDrawn = true
+      $.ui.status(undefined)
+    }
     const pr = s.branch?.pr
     const detail = s.branch?.detail
-    if (!pr || !detail) return next(e)
-
     const ui = $.ui.resolve(e)
     const { Box, Text, Button, Link } = ui
+
+    // a branch without a PR, drawn like the PR bar: a grey branch icon, the Jira
+    // key where the PR number goes, the issue's summary as the dim title, then its
+    // status and "No PR" as the bar's pills. Without a key, the branch name is the title.
+    if (!pr || !detail) {
+      const branch = s.branch
+      if (!branch) return next(e)
+      const BranchSvg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
+      const key = branch.issueKey
+      const keyHref = key ? issueUrl(cfg, key) : null
+      const issue = key ? s.issues[key] : undefined
+      const title = issue?.summary || branch.name
+      const status = e.props.bodyColumns >= 60 && issue?.status ? issue.status : null
+      return (
+        <Box flexDirection="column" paddingX={e.surface === 'terminal' ? 1 : 0}>
+          <Box flexDirection="row" alignItems="center" columnGap={2}>
+            <Box key="band-branch" flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
+              {BranchSvg ? (
+                <Box key="branch-icon" flexShrink={0}>
+                  <BranchSvg source={branchIconSvg(PR_STATE.DRAFT.stroke)} alt="Branch" width={16} height={16} />
+                </Box>
+              ) : (
+                <Box key="branch-icon" flexShrink={0}>
+                  <Text dimColor>⎇</Text>
+                </Box>
+              )}
+              {key && (
+                <Text bold color="blue" underline={Boolean(keyHref)}>
+                  {keyHref ? <Link href={keyHref} label={key} /> : key}
+                </Text>
+              )}
+            </Box>
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text dimColor wrap="truncate-end">
+                {title}
+              </Text>
+            </Box>
+            {status && (
+              <Box key="bar-issue-status" flexShrink={0}>
+                <Text color={statusColor(issue?.category ?? '')} dimColor={!statusColor(issue?.category ?? '')}>
+                  {status}
+                </Text>
+              </Box>
+            )}
+            <Box key="bar-no-pr" flexShrink={0}>
+              <Text dimColor>{s.error ? 'Bitbucket unavailable' : 'No PR'}</Text>
+            </Box>
+          </Box>
+        </Box>
+      )
+    }
     const Svg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
     const isTerminal = e.surface === 'terminal'
     const look = PR_STATE[detail.state] ?? PR_STATE.OPEN

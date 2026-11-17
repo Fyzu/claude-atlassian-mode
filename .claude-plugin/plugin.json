@@ -1,6 +1,6 @@
 {
   "name": "jira-bitbucket",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bitbucket review queue and your open PRs in a pane; the current branch's PR, CI and Jira issue in a bar above the prompt",
   "author": {
     "name": "Dmitry Petrov",

@@ -4,6 +4,8 @@ A [Claude Code](https://code.claude.com) mod (a plugin of function hooks) that b
 
 - **`/jb` pane**: the PRs waiting for your review, and your own open PRs. Each one shows build status, approvals, "needs work", conflicts, open tasks, comments and the linked Jira issue's status. One click drafts a *Review with Claude* or *Triage with Claude* prompt.
 - **PR bar above the prompt**: the current git branch's PR. It shows the number (hover for a card with author and diff stats), title, approvals, merge state and a CI dot. Click **CI ▼** to unfold the Checks, Reviews, Merge and Jira rows. When something needs doing you also get **Fix failing checks**, **Address review** and **Resolve conflicts** buttons.
+- **Branch without a PR**: the bar still shows the branch, with its Jira issue key, summary and status, and a "No PR" mark.
+- **Status line fallback**: where the bar above the prompt isn't drawn, the same facts (branch, PR state, CI, approvals, merge state, Jira status) go on one line in the status line.
 - **Read-only by design.** The mod only *reads* Bitbucket and Jira. Every button fills the prompt box with a draft and nothing is sent until you press Enter. Any write (a comment, an approval, a push) goes through Claude's normal permission prompts.
 - Refreshes every few minutes, and when you switch branches.
 
@@ -120,7 +122,8 @@ Jira keys are taken from the PR title (`[ABC-123] …`) or else the branch name 
 - **`Bitbucket: bkt not found`**: set the `bkt` option to the full path (`which bkt`).
 - **`Bitbucket: …401…`**: run `bkt auth login <your Bitbucket URL>` again.
 - **`Jira: …`** in yellow: the MCP server isn't connected or its name differs. Run `claude mcp list` and set `jiraServer` to match.
-- **No PR bar**: the branch has no PR, or `origin` isn't the Bitbucket repo (expects `…/<project>/<repo>.git`).
+- **Bar says "No PR" for a branch that has one**: `origin` isn't the Bitbucket repo (expects `…/<project>/<repo>.git`).
+- **No bar at all**: the session's folder isn't on a git branch.
 - Run `claude --debug` to see why a hook was skipped.
 
 ## Development
